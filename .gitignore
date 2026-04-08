@@ -1,0 +1,11 @@
+# Ignore runtime files
+*.swp
+*.tmp
+*.bak
+*.log
+
+# Ignore cache and state
+.cache/
+.state/
+backups/
+aichat/current
