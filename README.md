@@ -2,7 +2,7 @@
 
 MU/TH/UR is an evolving shell environment system that integrates AI profile management via `aiswap`.
 
-It serves as the execution environment and orchestration layer for AI configuration workflows.
+It serves as the execution environment and orchestration layer for AI configuration workflows, while providing a hardened, WSL-optimized baseline for development.
 
 ---
 
@@ -10,6 +10,7 @@ It serves as the execution environment and orchestration layer for AI configurat
 
 - Provide a cohesive Bash environment with integrated AI profile control
 - Serve as the runtime layer for `aiswap`
+- Guarantee secure, persistent SSH and Git operations (WSL-optimized)
 - Enable future cross-machine sync
 - Maintain modular, auditable shell infrastructure
 
@@ -18,15 +19,15 @@ It serves as the execution environment and orchestration layer for AI configurat
 ## Current Structure
 
 - `bashrc`  
-  Core shell runtime  
-  → integrates `aiswap v1.2.2`
+  Core shell runtime (currently encapsulates all logic)  
+  → integrates `aiswap v1.2.3` and persistent SSH socket management
 
-- `aichat/`  
-  Profile + alias data layer  
-  → YAML files created dynamically by aichat
+- `aichat/` (Tentative)  
+  Placeholder for profile + alias data layer  
+  → YAML files are currently created dynamically in `~/.config/aichat`
 
-- `scripts/`  
-  Bootstrap and scaffolding
+- `scripts/` (Tentative)  
+  Placeholder for future bootstrap and scaffolding
 
 - `.gitignore`  
   Excludes runtime state
@@ -45,13 +46,14 @@ It serves as the execution environment and orchestration layer for AI configurat
 
 ## Status
 
-⚠️ Work in progress
+⚠️ Phase 3 (Active Development)
 
 - Structure is evolving
 - Interfaces may shift between patches
 - Stability focus:
-  - local profile switching
-  - shell integration
+  - local atomic profile switching
+  - WSL SSH-agent persistence
+  - shell integration parity
 
 ---
 
