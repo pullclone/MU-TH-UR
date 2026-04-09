@@ -1,6 +1,6 @@
-# ~/.bashrc - MU/TH/UR Integrated Shell
+# ~/.bashrc — MU/TH/UR Structured Operator Shell
 # Maintainer: Ethan P. Kelley
-# Version: MU/TH/UR Phase 2 (aiswap v1.2.2 integrated)
+# Rebuilt: 2026-04-07 (aiswap v1.2.3 + WSL SSH hardening)
 
 #######################################################
 # INTERACTIVE GUARD
@@ -8,7 +8,7 @@
 [[ $- != *i* ]] && return
 
 #######################################################
-# SYSTEM BASE
+# SYSTEM CONFIG
 #######################################################
 [[ -f /etc/bashrc ]] && source /etc/bashrc
 
@@ -22,7 +22,6 @@
 # SHELL OPTIONS
 #######################################################
 shopt -s checkwinsize histappend 2>/dev/null
-
 bind "set bell-style none" 2>/dev/null
 bind "set completion-ignore-case on" 2>/dev/null
 bind "set show-all-if-ambiguous on" 2>/dev/null
@@ -35,14 +34,15 @@ export HISTFILESIZE=2000000
 export HISTTIMEFORMAT="%F %T "
 export HISTCONTROL="erasedups:ignoredups:ignorespace"
 
-__history_prompt_command() { history -a; }
+__hist_sync(){ history -a; }
 case ";$PROMPT_COMMAND;" in
-  *";__history_prompt_command;"*) ;;
-  *) PROMPT_COMMAND="__history_prompt_command;$PROMPT_COMMAND" ;;
+*";__hist_sync;"*) ;;
+"") PROMPT_COMMAND="__hist_sync" ;;
+*)  PROMPT_COMMAND="__hist_sync;$PROMPT_COMMAND" ;;
 esac
 
 #######################################################
-# ENV
+# ENVIRONMENT
 #######################################################
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -51,101 +51,155 @@ export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 
 export VISUAL="${VISUAL:-micro}"
 export EDITOR="${EDITOR:-$VISUAL}"
+export CLICOLOR=1
+
+export GOPATH="${GOPATH:-$HOME/go}"
+export GOBIN="${GOBIN:-$GOPATH/bin}"
 
 #######################################################
 # PATH
 #######################################################
-__path_prepend(){ [[ -d "$1" ]] && [[ ":$PATH:" != *":$1:"* ]] && PATH="$1:$PATH"; }
+__path_prepend(){ [[ -d "$1" && ":$PATH:" != *":$1:"* ]] && PATH="$1:$PATH"; }
 __path_prepend "$HOME/.local/bin"
 __path_prepend "$HOME/.cargo/bin"
+__path_prepend "$GOBIN"
 export PATH
 
 #######################################################
-# START DIR
+# START DIRECTORY
 #######################################################
 [[ -d "$HOME/Dev" ]] && cd "$HOME/Dev"
 
 #######################################################
-# SAFE OPS
+# MU/TH/UR CORE
+#######################################################
+M_BLUE='\e[38;5;33m'
+M_DIM='\e[2m'
+M_BOLD='\e[1m'
+M_RESET='\e[0m'
+
+_cmd(){ command -v "$1" >/dev/null 2>&1; }
+
+_mlog(){ printf "%b[%s]%b %s\n" "$M_BLUE" "$1" "$M_RESET" "$2"; }
+
+_mbanner(){
+    echo -e "${M_BLUE}${M_BOLD}"
+    _cmd figlet && figlet -f small "MU/TH/UR" || echo "[MU/TH/UR]"
+    echo -e "${M_DIM}:: $1 ::${M_RESET}"
+}
+
+export MOTHER_MODE="${MOTHER_MODE:-SAFE}"
+
+#######################################################
+# SYSTEM DOMAIN
+#######################################################
+mother-status(){
+    _mbanner "SYSTEM STATUS"
+    _mlog HOST "$(hostname)"
+    _mlog UPTIME "$(uptime -p 2>/dev/null)"
+    _mlog LOAD "$(cut -d ' ' -f1-3 /proc/loadavg 2>/dev/null)"
+    _mlog MODE "$MOTHER_MODE"
+    _mlog AI "${MOTHER_AI_PROFILE:-unset}"
+}
+
+mother-reload(){ source "$HOME/.bashrc"; }
+
+mother-disconnect(){
+    sudo -k
+    _mbanner "UPLINK TERMINATED"
+    _mlog AUTH "Privileges revoked"
+}
+
+#######################################################
+# SECURITY DOMAIN
+#######################################################
+airlock(){
+    sudo -k
+    _cmd loginctl && loginctl lock-session 2>/dev/null
+    _mlog AIRLOCK "Session secured"
+}
+
+uplink-status(){ ssh-add -l 2>/dev/null || _mlog UPLINK "No identities"; }
+uplink-reset(){ ssh-add -D 2>/dev/null; sudo -k; }
+
+#######################################################
+# NAVIGATION
+#######################################################
+cargo-mkcd(){ mkdir -p "$1" && cd "$1"; }
+
+cargo-up(){
+    local n="${1:-1}" p=""
+    for ((i=0;i<n;i++)); do p="../$p"; done
+    cd "$p"
+}
+
+#######################################################
+# FILE OPS
 #######################################################
 alias cp='cp -i'
 alias mv='mv -i'
 alias rm='rm -i'
+alias mkdir='mkdir -pv'
+
+cargo-list(){ _cmd eza && eza -al --icons || ls -alF; }
+cargo-search(){ _cmd rg && rg "$@" || grep -R "$@"; }
 
 #######################################################
-# MU/TH/UR VISUAL CORE
+# DEV DOMAIN
 #######################################################
-BLUE='\e[34m'; BOLD='\e[1m'; DIM='\e[2m'; RESET='\e[0m'
-
-_cmd_exists(){ command -v "$1" >/dev/null 2>&1; }
-
-_mother_banner(){
-  echo -e "${BLUE}${BOLD}[MU/TH/UR] >> ${1:-STATUS}${RESET}"
-}
-
-mother-status(){
-  _mother_banner "SYSTEM STATUS"
-  echo -e "${BLUE}Host: $(hostname)${RESET}"
-  echo -e "${BLUE}Uptime: $(uptime -p 2>/dev/null || echo N/A)${RESET}"
-}
-
-mother-disconnect(){
-  sudo -k
-  _mother_banner "UPLINK TERMINATED"
-}
-
-alias mthr-off='mother-disconnect'
-alias mu-status='mother-status'
+hyper-status(){ git status; }
+hyper-add(){ git add "$@"; }
+hyper-commit(){ git commit "$@"; }
+hyper-push(){ git push; }
+hyper-log(){ git log --oneline; }
+hyper-diff(){ git diff; }
 
 #######################################################
-# SSH AGENT (WSL FIXED)
+# NETWORK
+#######################################################
+net-local(){ hostname -I | awk '{print $1}'; }
+net-public(){ curl -s https://ifconfig.me; }
+
+#######################################################
+# OBSERVABILITY
+#######################################################
+scan-proc(){
+    _mbanner "PROCESS SCAN"
+    ps aux --sort=-%mem | head -n 15
+}
+
+scan-disk(){
+    _mbanner "DISK"
+    du -sh * 2>/dev/null | sort -h
+}
+
+#######################################################
+# SSH AGENT (WSL-OPTIMAL SOCKET MODEL)
 #######################################################
 mkdir -p "$HOME/.ssh/sockets"
-chmod 700 "$HOME/.ssh/sockets"
+chmod 700 "$HOME/.ssh/sockets" 2>/dev/null
 
 export SSH_AUTH_SOCK="$HOME/.ssh/sockets/ssh-agent.socket"
 
 start_ssh_agent(){
-  rm -f "$SSH_AUTH_SOCK"
-  ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
+    rm -f "$SSH_AUTH_SOCK"
+    ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
 }
 
 ssh-add -l >/dev/null 2>&1
-case $? in
-  2) start_ssh_agent ;;
-esac
+if [ $? -eq 2 ]; then
+    start_ssh_agent
+fi
 
-ssh-add -l >/dev/null 2>&1
-case $? in
-  1) [[ -f "$HOME/.ssh/id_ed25519" ]] && ssh-add "$HOME/.ssh/id_ed25519" ;;
-esac
-
-#######################################################
-# AI ENVIRONMENT BINDING
-#######################################################
-export AICHAT_CONF_DIR="${XDG_CONFIG_HOME}/aichat"
-export AICHAT_ACTIVE="$(cat "$AICHAT_CONF_DIR/current" 2>/dev/null || echo unknown)"
-
-ai-status(){
-  _mother_banner "AI PROFILE"
-  echo -e "${BLUE}Active: $AICHAT_ACTIVE${RESET}"
-}
+if ! ssh-add -l >/dev/null 2>&1; then
+    [[ -f "$HOME/.ssh/id_ed25519" ]] && ssh-add "$HOME/.ssh/id_ed25519" >/dev/null
+fi
 
 #######################################################
-# AISWAP v1.2.2
+# AICHAT CORE (v1.2.3 — hardened)
 #######################################################
-###############################################################################
-# _aichat_swap v1.2.2
-#
-# Fixes:
-# - Restores short flags (-h, -l, -s, -d)
-# - Fixes command normalization layer
-# - Preserves full swap + alias system
-###############################################################################
 _aichat_swap() {
-    local VERSION="1.2.2"
-
-    # Paths
+    local VERSION="1.2.3"
     local BASE_DIR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}"
     local DIR="$BASE_DIR"
     local BACKUP_DIR="$DIR/backups"
@@ -153,19 +207,10 @@ _aichat_swap() {
     local CURRENT_FILE="$DIR/current"
     local ALIAS_FILE="$DIR/aliases"
 
-    # Profiles
     local IDS=(c g m o)
     local NAMES=(altostrat alpha lechat stargate)
+    local DRY_RUN=false VERBOSE=false TMPFILE="" HAVE_LOCK=false
 
-    # Flags
-    local DRY_RUN=false
-    local VERBOSE=false
-    local TMPFILE=""
-    local HAVE_LOCK=false
-
-    ###########################################################################
-    # Helpers
-    ###########################################################################
     _msg() {
         local type="$1"; shift
         local color=0 out=1 sym=""
@@ -198,7 +243,7 @@ _aichat_swap() {
         [[ -n "$EDITOR" ]] && { echo "$EDITOR"; return; }
         local editors=(code subl micro nano vim vi)
         for ed in "${editors[@]}"; do
-            command -v "$ed" >/dev/null && { echo "$ed"; return; }
+            command -v "$ed" >/dev/null 2>&1 && { echo "$ed"; return; }
         done
         echo "vi"
     }
@@ -211,9 +256,6 @@ _aichat_swap() {
         echo "unknown"
     }
 
-    ###########################################################################
-    # Alias Control Plane
-    ###########################################################################
     _alias_list() { [[ -f "$ALIAS_FILE" ]] && cat "$ALIAS_FILE"; }
 
     _alias_write() {
@@ -224,34 +266,50 @@ _aichat_swap() {
     }
 
     _rebuild_aliases() {
-        [[ -f "$ALIAS_FILE" ]] || return
-        while read -r id name; do
-            [[ -z "$id" || -z "$name" ]] && continue
-            alias "$name"="_aichat_swap $id"
-        done < "$ALIAS_FILE"
         alias aiswap="_aichat_swap"
+        if [[ -f "$ALIAS_FILE" ]]; then
+            while read -r id name; do
+                [[ -z "$id" || -z "$name" ]] && continue
+                alias "$name"="_aichat_swap $id"
+            done < "$ALIAS_FILE"
+        else
+            local i
+            for i in "${!IDS[@]}"; do
+                alias "${NAMES[$i]}"="_aichat_swap ${IDS[$i]}"
+            done
+        fi
     }
 
-    ###########################################################################
-    # Locking
-    ###########################################################################
     _acquire_lock() {
+        mkdir -p "$DIR" 2>/dev/null
         local retries=0 max=6 stale=30
         while (( retries < max )); do
-            mkdir "$LOCK_DIR" 2>/dev/null && return 0
-            sleep 0.5; ((retries++))
+            if mkdir "$LOCK_DIR" 2>/dev/null; then
+                return 0
+            fi
+            local now mtime=0
+            now=$(date +%s)
+            if stat -c %Y "$LOCK_DIR" >/dev/null 2>&1; then
+                mtime=$(stat -c %Y "$LOCK_DIR")
+            elif stat -f %m "$LOCK_DIR" >/dev/null 2>&1; then
+                mtime=$(stat -f %m "$LOCK_DIR")
+            fi
+            if (( mtime > 0 && now - mtime > stale )); then
+                _msg warn "Stale lock detected — reclaiming"
+                rmdir "$LOCK_DIR" 2>/dev/null
+                continue
+            fi
+            sleep 0.5
+            ((retries++))
         done
         return 1
     }
 
     _cleanup() {
-        [[ -n "$TMPFILE" && -f "$TMPFILE" ]] && rm -f "$TMPFILE"
+        [[ -n "$TMPFILE" && -f "$TMPFILE" ]] && rm -f "$TMPFILE" 2>/dev/null
         $HAVE_LOCK && rmdir "$LOCK_DIR" 2>/dev/null
     }
 
-    ###########################################################################
-    # HELP
-    ###########################################################################
     _show_help() {
         cat <<EOF
 aiswap v$VERSION
@@ -270,9 +328,6 @@ Commands:
 EOF
     }
 
-    ###########################################################################
-    # ARG PARSING
-    ###########################################################################
     local args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -291,25 +346,21 @@ EOF
     local cmd="${1:-status}"
     cmd=$(printf "%s" "$cmd" | tr '[:upper:]' '[:lower:]')
 
-    ###########################################################################
-    # COMMAND NORMALIZATION
-    ###########################################################################
     case "$cmd" in
         ls) cmd="list" ;;
         stat) cmd="status" ;;
     esac
 
-    ###########################################################################
-    # Alias Commands
-    ###########################################################################
     if [[ "$cmd" == "alias" ]]; then
         case "${2:-list}" in
             list) _alias_list ;;
             add)
                 { _alias_list; printf "%s %s\n" "$3" "$4"; } | _alias_write
+                _msg ok "Alias added: $4 → $3"
                 ;;
             remove)
                 grep -vE "[[:space:]]$3$" "$ALIAS_FILE" | _alias_write
+                _msg ok "Alias removed: $3"
                 ;;
             edit) "$(_get_editor)" "$ALIAS_FILE" ;;
             rebuild) _rebuild_aliases ;;
@@ -317,14 +368,11 @@ EOF
         return
     fi
 
-    ###########################################################################
-    # Core Commands
-    ###########################################################################
     case "$cmd" in
         help) _show_help; return ;;
         list)
             local current=""
-            [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE")
+            [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE" 2>/dev/null | tr -cd '[:alnum:]')
             for i in "${!IDS[@]}"; do
                 local mark=" "
                 [[ "${IDS[$i]}" == "$current" ]] && mark="*"
@@ -344,27 +392,73 @@ EOF
             _exec mkdir -p "$DIR" "$BACKUP_DIR"
             touch "$DIR/config.yaml"
             for id in "${IDS[@]}"; do touch "$DIR/$id.config.yaml"; done
+            _msg ok "Initialization complete."
             return ;;
     esac
 
-    ###########################################################################
-    # Swap Logic
-    ###########################################################################
     local target="$cmd"
     local current=""
-    [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE")
+    [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE" 2>/dev/null | tr -cd '[:alnum:]')
 
-    [[ "$target" == "$current" ]] && { _msg ok "Already active."; return; }
+    local valid_target=false i
+    for i in "${!IDS[@]}"; do [[ "$target" == "${IDS[$i]}" ]] && valid_target=true && break; done
 
-    _acquire_lock || { _msg err "Lock failed."; return 1; }
+    if ! $valid_target; then
+        _msg err "Unknown profile or command: '$target'"
+        _msg info "Use 'list' to see options."
+        return 1
+    fi
+
+    if [[ "$target" == "$current" ]]; then
+        _msg ok "Profile [$target] already active."
+        return 0
+    fi
+
+    if $DRY_RUN; then
+        _msg dry "Would lock, save current state, and swap to: $(_get_name "$target") ($target)"
+        return 0
+    fi
+
+    _acquire_lock || { _msg err "Lock failed (busy?)."; return 1; }
     HAVE_LOCK=true
-    trap '_cleanup' EXIT
+    trap '_cleanup' EXIT INT TERM
+
+    if [[ -z "$current" ]] && [[ -f "$DIR/config.yaml" ]]; then
+        _msg warn "Unknown state. Fingerprinting..."
+        local id match_id=""
+        for id in "${IDS[@]}"; do
+            if cmp -s "$DIR/config.yaml" "$DIR/$id.config.yaml" 2>/dev/null; then
+                match_id="$id"; break
+            fi
+        done
+        
+        if [[ -n "$match_id" ]]; then
+            current="$match_id"
+            echo "$current" > "$CURRENT_FILE"
+        else
+            local ts; ts=$(date +%Y%m%d_%H%M%S)
+            _msg warn "No match found. Backing up active config..."
+            mkdir -p "$BACKUP_DIR" 2>/dev/null
+            cp -p "$DIR/config.yaml" "$BACKUP_DIR/unknown_$ts.yaml" 2>/dev/null
+            find "$BACKUP_DIR" -type f -mtime +7 -delete 2>/dev/null
+        fi
+    fi
+
+    if [[ -n "$current" ]]; then
+        local storage_file="$DIR/$current.config.yaml"
+        if ! cmp -s "$DIR/config.yaml" "$storage_file" 2>/dev/null; then
+            cp -p "$DIR/config.yaml" "$storage_file" 2>/dev/null
+        fi
+    fi
 
     local src="$DIR/$target.config.yaml"
-    [[ ! -f "$src" ]] && { _msg err "Missing profile."; return 1; }
+    if [[ ! -f "$src" ]]; then
+        _msg err "Missing profile: $src"
+        return 1
+    fi
 
     TMPFILE=$(mktemp "$DIR/.tmp.XXXXXX") || return 1
-    cp "$src" "$TMPFILE"
+    cp -p "$src" "$TMPFILE"
     mv "$TMPFILE" "$DIR/config.yaml"
     echo "$target" > "$CURRENT_FILE"
 
@@ -372,36 +466,74 @@ EOF
 }
 
 #######################################################
-# AISWAP AUTO-LOAD
+# AICHAT INIT + ENV BINDING
 #######################################################
 if [[ $- == *i* ]]; then
-  _aichat_swap alias rebuild 2>/dev/null
+    _aichat_swap alias rebuild 2>/dev/null
+
+    # Sync environment variable on boot
+    _MU_AICHAT_CUR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}/current"
+    if [[ -f "$_MU_AICHAT_CUR" ]]; then
+        export MOTHER_AI_PROFILE="$(cat "$_MU_AICHAT_CUR" 2>/dev/null | tr -cd '[:alnum:]')"
+    fi
 fi
+
+#######################################################
+# MU/TH/UR AI INTERFACE
+#######################################################
+mother-ai(){
+    _mbanner "AI CONFIGURATION"
+
+    # Pass all commands down to aichat_swap
+    _aichat_swap "$@"
+
+    # Silently resync MOTHER_AI_PROFILE after any operation
+    local cur="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}/current"
+    if [[ -f "$cur" ]]; then
+        export MOTHER_AI_PROFILE="$(cat "$cur" 2>/dev/null | tr -cd '[:alnum:]')"
+    fi
+}
+
+alias ai='mother-ai'
+alias aiswap='_aichat_swap'
 
 #######################################################
 # MODERN TOOLING
 #######################################################
-command -v eza >/dev/null && alias ls='eza -a --icons'
-command -v bat >/dev/null && alias cat='bat'
+_cmd eza && alias ls='eza -a --icons'
+_cmd bat && alias cat='bat'
+_cmd rg  && alias grep='rg'
 
 #######################################################
-# GIT
+# LEGACY COMPATIBILITY
 #######################################################
+alias mkcd='cargo-mkcd'
+alias up='cargo-up'
+
 alias g='git'
-alias gs='git status'
-alias gp='git push'
+alias gs='hyper-status'
+alias ga='hyper-add'
+alias gc='hyper-commit'
+alias gp='hyper-push'
+
+alias ll='cargo-list'
+alias iplocal='net-local'
+alias ippublic='net-public'
+
+alias reload='mother-reload'
+alias zero='clear'
+alias path='echo -e ${PATH//:/\n}'
 
 #######################################################
-# STARTUP
+# PROMPT
 #######################################################
-command -v starship >/dev/null && eval "$(starship init bash)"
-command -v zoxide >/dev/null && eval "$(zoxide init bash)"
+if _cmd starship; then
+    eval "$(starship init bash)"
+else
+    PS1='[\u@\h \W] $ '
+fi
 
 #######################################################
-# MU/TH/UR BOOT
+# BOOT
 #######################################################
-muther-motd(){
-  echo -e "${BLUE}${BOLD}MU/TH/UR 6000 ONLINE${RESET}"
-}
-
-muther-motd
+[[ -z "$MOTHER_SILENT" ]] && mother-status
