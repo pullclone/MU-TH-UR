@@ -460,9 +460,6 @@ EOF
             return ;;
         init)
             _exec mkdir -p "$DIR" "$BACKUP_DIR"
-            touch "$DIR/config.yaml"
-            # Now dynamically touches custom profiles as well
-            for id in "${IDS[@]}"; do touch "$DIR/$id.config.yaml"; done
             _msg ok "Initialization complete."
             return ;;
     esac
