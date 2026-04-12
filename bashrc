@@ -1,6 +1,6 @@
 # ~/.bashrc — MU/TH/UR Structured Operator Shell
 # Maintainer: Ethan P. Kelley
-# Rebuilt: 2026-04-07 (aiswap v1.2.4 + SSH Double-Prompt Fix)
+# Rebuilt: 2026-04-07 (aiswap v1.2.5 + SSH Double-Prompt Fix)
 
 #######################################################
 # INTERACTIVE GUARD
@@ -202,10 +202,10 @@ if [[ -z "$_MU_SSH_AUTH_ATTEMPTED" ]]; then
 fi
 
 #######################################################
-# AICHAT CORE (v1.2.4 — hardened)
+# AICHAT CORE (v1.2.5 — dynamic alias merging)
 #######################################################
 _aichat_swap() {
-    local VERSION="1.2.4"
+    local VERSION="1.2.5"
     local BASE_DIR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}"
     local DIR="$BASE_DIR"
     local BACKUP_DIR="$DIR/backups"
@@ -213,10 +213,52 @@ _aichat_swap() {
     local CURRENT_FILE="$DIR/current"
     local ALIAS_FILE="$DIR/aliases"
 
+    # Default Profiles
     local IDS=(c g m o)
     local NAMES=(altostrat alpha lechat stargate)
+    
     local DRY_RUN=false VERBOSE=false TMPFILE="" HAVE_LOCK=false
 
+    # Dynamically merge file-based aliases into engine memory (Bash 3.2 Portable)
+    _load_profiles() {
+        [[ -f "$ALIAS_FILE" ]] || return 0
+        local new_ids=() new_names=()
+        local i j found
+
+        # Load defaults
+        for i in "${!IDS[@]}"; do
+            new_ids+=("${IDS[$i]}")
+            new_names+=("${NAMES[$i]}")
+        done
+
+        # Merge overrides / additions
+        while read -r id name; do
+            # Skip empty lines or comments
+            [[ -z "$id" || -z "$name" || "$id" == \#* ]] && continue
+            found=false
+            for j in "${!new_ids[@]}"; do
+                if [[ "${new_ids[$j]}" == "$id" ]]; then
+                    new_names[$j]="$name"
+                    found=true
+                    break
+                fi
+            done
+            if ! $found; then
+                new_ids+=("$id")
+                new_names+=("$name")
+            fi
+        done < "$ALIAS_FILE"
+
+        IDS=("${new_ids[@]}")
+        NAMES=("${new_names[@]}")
+    }
+    
+    # Initialize engine state
+    _load_profiles
+
+    ###########################################################################
+    # Helpers
+    ###########################################################################
     _msg() {
         local type="$1"; shift
         local color=0 out=1 sym=""
@@ -262,6 +304,9 @@ _aichat_swap() {
         echo "unknown"
     }
 
+    ###########################################################################
+    # Alias Control Plane
+    ###########################################################################
     _alias_list() { [[ -f "$ALIAS_FILE" ]] && cat "$ALIAS_FILE"; }
 
     _alias_write() {
@@ -273,19 +318,16 @@ _aichat_swap() {
 
     _rebuild_aliases() {
         alias aiswap="_aichat_swap"
-        if [[ -f "$ALIAS_FILE" ]]; then
-            while read -r id name; do
-                [[ -z "$id" || -z "$name" ]] && continue
-                alias "$name"="_aichat_swap $id"
-            done < "$ALIAS_FILE"
-        else
-            local i
-            for i in "${!IDS[@]}"; do
-                alias "${NAMES[$i]}"="_aichat_swap ${IDS[$i]}"
-            done
-        fi
+        local i
+        # Since _load_profiles already merged defaults and file data, we just map them all
+        for i in "${!IDS[@]}"; do
+            alias "${NAMES[$i]}"="_aichat_swap ${IDS[$i]}"
+        done
     }
 
+    ###########################################################################
+    # Locking & Cleanup
+    ###########################################################################
     _acquire_lock() {
         mkdir -p "$DIR" 2>/dev/null
         local retries=0 max=6 stale=30
@@ -293,6 +335,7 @@ _aichat_swap() {
             if mkdir "$LOCK_DIR" 2>/dev/null; then
                 return 0
             fi
+
             local now mtime=0
             now=$(date +%s)
             if stat -c %Y "$LOCK_DIR" >/dev/null 2>&1; then
@@ -300,11 +343,13 @@ _aichat_swap() {
             elif stat -f %m "$LOCK_DIR" >/dev/null 2>&1; then
                 mtime=$(stat -f %m "$LOCK_DIR")
             fi
+
             if (( mtime > 0 && now - mtime > stale )); then
                 _msg warn "Stale lock detected — reclaiming"
                 rmdir "$LOCK_DIR" 2>/dev/null
                 continue
             fi
+
             sleep 0.5
             ((retries++))
         done
@@ -320,6 +365,9 @@ _aichat_swap() {
         trap - INT TERM 2>/dev/null
     }
 
+    ###########################################################################
+    # HELP
+    ###########################################################################
     _show_help() {
         cat <<EOF
 aiswap v$VERSION
@@ -338,6 +386,9 @@ Commands:
 EOF
     }
 
+    ###########################################################################
+    # ARG PARSING
+    ###########################################################################
     local args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -356,11 +407,17 @@ EOF
     local cmd="${1:-status}"
     cmd=$(printf "%s" "$cmd" | tr '[:upper:]' '[:lower:]')
 
+    ###########################################################################
+    # COMMAND NORMALIZATION
+    ###########################################################################
     case "$cmd" in
         ls) cmd="list" ;;
         stat) cmd="status" ;;
     esac
 
+    ###########################################################################
+    # Alias Commands
+    ###########################################################################
     if [[ "$cmd" == "alias" ]]; then
         case "${2:-list}" in
             list) _alias_list ;;
@@ -378,6 +435,9 @@ EOF
         return
     fi
 
+    ###########################################################################
+    # Core Commands
+    ###########################################################################
     case "$cmd" in
         help) _show_help; return ;;
         list)
@@ -401,11 +461,15 @@ EOF
         init)
             _exec mkdir -p "$DIR" "$BACKUP_DIR"
             touch "$DIR/config.yaml"
+            # Now dynamically touches custom profiles as well
             for id in "${IDS[@]}"; do touch "$DIR/$id.config.yaml"; done
             _msg ok "Initialization complete."
             return ;;
     esac
 
+    ###########################################################################
+    # Swap Logic
+    ###########################################################################
     local target="$cmd"
     local current=""
     [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE" 2>/dev/null | tr -cd '[:alnum:]')
@@ -429,10 +493,14 @@ EOF
         return 0
     fi
 
+    # Acquire Lock (Strict cleanup routing from here down)
     _acquire_lock || { _msg err "Lock failed (busy?)."; return 1; }
     HAVE_LOCK=true
     trap '_cleanup; return 1' INT TERM
 
+    # ---------------------------------------------------------
+    # State Deduction & Backup 
+    # ---------------------------------------------------------
     if [[ -z "$current" ]] && [[ -f "$DIR/config.yaml" ]]; then
         _msg warn "Unknown state. Fingerprinting..."
         local id match_id=""
@@ -461,6 +529,9 @@ EOF
         fi
     fi
 
+    # ---------------------------------------------------------
+    # Perform Atomic Swap
+    # ---------------------------------------------------------
     local src="$DIR/$target.config.yaml"
     if [[ ! -f "$src" ]]; then
         _msg err "Missing profile: $src"
