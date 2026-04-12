@@ -1,6 +1,6 @@
 # ~/.bashrc — MU/TH/UR Structured Operator Shell
 # Maintainer: Ethan P. Kelley
-# Rebuilt: 2026-04-07 (aiswap v1.2.3 + WSL SSH hardening)
+# Rebuilt: 2026-04-07 (aiswap v1.2.4 + SSH Double-Prompt Fix)
 
 #######################################################
 # INTERACTIVE GUARD
@@ -182,24 +182,30 @@ chmod 700 "$HOME/.ssh/sockets" 2>/dev/null
 export SSH_AUTH_SOCK="$HOME/.ssh/sockets/ssh-agent.socket"
 
 start_ssh_agent(){
+    pkill -u "$USER" ssh-agent 2>/dev/null
     rm -f "$SSH_AUTH_SOCK"
-    ssh-agent -a "$SSH_AUTH_SOCK" >/dev/null
+    eval "$(ssh-agent -s -a "$SSH_AUTH_SOCK")" >/dev/null
 }
 
-ssh-add -l >/dev/null 2>&1
-if [ $? -eq 2 ]; then
-    start_ssh_agent
-fi
+# Only invoke SSH unlock sequence ONCE per session tree to prevent double-prompts
+if [[ -z "$_MU_SSH_AUTH_ATTEMPTED" ]]; then
+    export _MU_SSH_AUTH_ATTEMPTED=1
 
-if ! ssh-add -l >/dev/null 2>&1; then
-    [[ -f "$HOME/.ssh/id_ed25519" ]] && ssh-add "$HOME/.ssh/id_ed25519" >/dev/null
+    ssh-add -l >/dev/null 2>&1
+    if [ $? -eq 2 ]; then
+        start_ssh_agent
+    fi
+
+    if ! ssh-add -l >/dev/null 2>&1; then
+        [[ -f "$HOME/.ssh/id_ed25519" ]] && ssh-add "$HOME/.ssh/id_ed25519" </dev/tty
+    fi
 fi
 
 #######################################################
-# AICHAT CORE (v1.2.3 — hardened)
+# AICHAT CORE (v1.2.4 — hardened)
 #######################################################
 _aichat_swap() {
-    local VERSION="1.2.3"
+    local VERSION="1.2.4"
     local BASE_DIR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}"
     local DIR="$BASE_DIR"
     local BACKUP_DIR="$DIR/backups"
@@ -307,7 +313,11 @@ _aichat_swap() {
 
     _cleanup() {
         [[ -n "$TMPFILE" && -f "$TMPFILE" ]] && rm -f "$TMPFILE" 2>/dev/null
-        $HAVE_LOCK && rmdir "$LOCK_DIR" 2>/dev/null
+        if $HAVE_LOCK; then
+            rmdir "$LOCK_DIR" 2>/dev/null
+            HAVE_LOCK=false
+        fi
+        trap - INT TERM 2>/dev/null
     }
 
     _show_help() {
@@ -421,7 +431,7 @@ EOF
 
     _acquire_lock || { _msg err "Lock failed (busy?)."; return 1; }
     HAVE_LOCK=true
-    trap '_cleanup' EXIT INT TERM
+    trap '_cleanup; return 1' INT TERM
 
     if [[ -z "$current" ]] && [[ -f "$DIR/config.yaml" ]]; then
         _msg warn "Unknown state. Fingerprinting..."
@@ -454,15 +464,30 @@ EOF
     local src="$DIR/$target.config.yaml"
     if [[ ! -f "$src" ]]; then
         _msg err "Missing profile: $src"
+        _cleanup
         return 1
     fi
 
-    TMPFILE=$(mktemp "$DIR/.tmp.XXXXXX") || return 1
+    # BUGFIX: Prevent 0-byte profile overrides
+    if [[ ! -s "$src" && -s "$DIR/config.yaml" ]]; then
+        _msg warn "Target profile [$target] is empty. Adopting active config data..."
+        cp -p "$DIR/config.yaml" "$src" 2>/dev/null
+    fi
+
+    TMPFILE=$(mktemp "$DIR/.tmp.XXXXXX") || {
+        _msg err "Failed to create temp file."
+        _cleanup
+        return 1
+    }
+    
     cp -p "$src" "$TMPFILE"
     mv "$TMPFILE" "$DIR/config.yaml"
     echo "$target" > "$CURRENT_FILE"
 
     _msg ok "Switched → $(_get_name "$target")"
+    
+    _cleanup
+    return 0
 }
 
 #######################################################
