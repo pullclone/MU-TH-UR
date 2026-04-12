@@ -1,6 +1,6 @@
 # ~/.bashrc — MU/TH/UR Structured Operator Shell
 # Maintainer: Ethan P. Kelley
-# Rebuilt: 2026-04-07 (aiswap v1.2.5 + SSH Double-Prompt Fix)
+# Rebuilt: 2026-04-07 (aiswap v1.2.6 + Core Inoculation)
 
 #######################################################
 # INTERACTIVE GUARD
@@ -125,7 +125,7 @@ uplink-reset(){ ssh-add -D 2>/dev/null; sudo -k; }
 #######################################################
 # NAVIGATION
 #######################################################
-cargo-mkcd(){ mkdir -p "$1" && cd "$1"; }
+cargo-mkcd(){ command mkdir -p "$1" && cd "$1"; }
 
 cargo-up(){
     local n="${1:-1}" p=""
@@ -176,14 +176,14 @@ scan-disk(){
 #######################################################
 # SSH AGENT (WSL-OPTIMAL SOCKET MODEL)
 #######################################################
-mkdir -p "$HOME/.ssh/sockets"
+command mkdir -p "$HOME/.ssh/sockets"
 chmod 700 "$HOME/.ssh/sockets" 2>/dev/null
 
 export SSH_AUTH_SOCK="$HOME/.ssh/sockets/ssh-agent.socket"
 
 start_ssh_agent(){
-    pkill -u "$USER" ssh-agent 2>/dev/null
-    rm -f "$SSH_AUTH_SOCK"
+    command pkill -u "$USER" ssh-agent 2>/dev/null
+    command rm -f "$SSH_AUTH_SOCK"
     eval "$(ssh-agent -s -a "$SSH_AUTH_SOCK")" >/dev/null
 }
 
@@ -202,10 +202,10 @@ if [[ -z "$_MU_SSH_AUTH_ATTEMPTED" ]]; then
 fi
 
 #######################################################
-# AICHAT CORE (v1.2.5 — dynamic alias merging)
+# AICHAT CORE (v1.2.6 — inoculated command expansion)
 #######################################################
 _aichat_swap() {
-    local VERSION="1.2.5"
+    local VERSION="1.2.6"
     local BASE_DIR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}"
     local DIR="$BASE_DIR"
     local BACKUP_DIR="$DIR/backups"
@@ -213,27 +213,21 @@ _aichat_swap() {
     local CURRENT_FILE="$DIR/current"
     local ALIAS_FILE="$DIR/aliases"
 
-    # Default Profiles
     local IDS=(c g m o)
     local NAMES=(altostrat alpha lechat stargate)
-    
     local DRY_RUN=false VERBOSE=false TMPFILE="" HAVE_LOCK=false
 
-    # Dynamically merge file-based aliases into engine memory (Bash 3.2 Portable)
     _load_profiles() {
         [[ -f "$ALIAS_FILE" ]] || return 0
         local new_ids=() new_names=()
         local i j found
 
-        # Load defaults
         for i in "${!IDS[@]}"; do
             new_ids+=("${IDS[$i]}")
             new_names+=("${NAMES[$i]}")
         done
 
-        # Merge overrides / additions
         while read -r id name; do
-            # Skip empty lines or comments
             [[ -z "$id" || -z "$name" || "$id" == \#* ]] && continue
             found=false
             for j in "${!new_ids[@]}"; do
@@ -253,12 +247,8 @@ _aichat_swap() {
         NAMES=("${new_names[@]}")
     }
     
-    # Initialize engine state
     _load_profiles
 
-    ###########################################################################
-    # Helpers
-    ###########################################################################
     _msg() {
         local type="$1"; shift
         local color=0 out=1 sym=""
@@ -274,17 +264,6 @@ _aichat_swap() {
         else
             printf "%s\n" "${sym}$*" >&$out
         fi
-    }
-
-    _exec() {
-        local cmd="$1"; shift
-        if $DRY_RUN || $VERBOSE; then
-            local debug="$cmd"
-            for arg in "$@"; do debug="$debug $(printf "%q" "$arg")"; done
-            $DRY_RUN && _msg dry "[DRY-RUN] $debug" && return 0
-            _msg info "$debug"
-        fi
-        "$cmd" "$@"
     }
 
     _get_editor() {
@@ -304,49 +283,42 @@ _aichat_swap() {
         echo "unknown"
     }
 
-    ###########################################################################
-    # Alias Control Plane
-    ###########################################################################
-    _alias_list() { [[ -f "$ALIAS_FILE" ]] && cat "$ALIAS_FILE"; }
+    _alias_list() { [[ -f "$ALIAS_FILE" ]] && command cat "$ALIAS_FILE"; }
 
     _alias_write() {
         local tmp
-        tmp=$(mktemp "$DIR/.aliases.tmp.XXXXXX") || return 1
-        cat > "$tmp"
-        mv "$tmp" "$ALIAS_FILE"
+        tmp=$(command mktemp "$DIR/.aliases.tmp.XXXXXX") || return 1
+        command cat > "$tmp"
+        command mv -f "$tmp" "$ALIAS_FILE"
     }
 
     _rebuild_aliases() {
         alias aiswap="_aichat_swap"
         local i
-        # Since _load_profiles already merged defaults and file data, we just map them all
         for i in "${!IDS[@]}"; do
             alias "${NAMES[$i]}"="_aichat_swap ${IDS[$i]}"
         done
     }
 
-    ###########################################################################
-    # Locking & Cleanup
-    ###########################################################################
     _acquire_lock() {
-        mkdir -p "$DIR" 2>/dev/null
+        command mkdir -p "$DIR" 2>/dev/null
         local retries=0 max=6 stale=30
         while (( retries < max )); do
-            if mkdir "$LOCK_DIR" 2>/dev/null; then
+            if command mkdir "$LOCK_DIR" 2>/dev/null; then
                 return 0
             fi
 
             local now mtime=0
-            now=$(date +%s)
-            if stat -c %Y "$LOCK_DIR" >/dev/null 2>&1; then
-                mtime=$(stat -c %Y "$LOCK_DIR")
-            elif stat -f %m "$LOCK_DIR" >/dev/null 2>&1; then
-                mtime=$(stat -f %m "$LOCK_DIR")
+            now=$(command date +%s)
+            if command stat -c %Y "$LOCK_DIR" >/dev/null 2>&1; then
+                mtime=$(command stat -c %Y "$LOCK_DIR")
+            elif command stat -f %m "$LOCK_DIR" >/dev/null 2>&1; then
+                mtime=$(command stat -f %m "$LOCK_DIR")
             fi
 
             if (( mtime > 0 && now - mtime > stale )); then
                 _msg warn "Stale lock detected — reclaiming"
-                rmdir "$LOCK_DIR" 2>/dev/null
+                command rmdir "$LOCK_DIR" 2>/dev/null
                 continue
             fi
 
@@ -357,17 +329,14 @@ _aichat_swap() {
     }
 
     _cleanup() {
-        [[ -n "$TMPFILE" && -f "$TMPFILE" ]] && rm -f "$TMPFILE" 2>/dev/null
+        [[ -n "$TMPFILE" && -f "$TMPFILE" ]] && command rm -f "$TMPFILE" 2>/dev/null
         if $HAVE_LOCK; then
-            rmdir "$LOCK_DIR" 2>/dev/null
+            command rmdir "$LOCK_DIR" 2>/dev/null
             HAVE_LOCK=false
         fi
         trap - INT TERM 2>/dev/null
     }
 
-    ###########################################################################
-    # HELP
-    ###########################################################################
     _show_help() {
         cat <<EOF
 aiswap v$VERSION
@@ -386,9 +355,6 @@ Commands:
 EOF
     }
 
-    ###########################################################################
-    # ARG PARSING
-    ###########################################################################
     local args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -407,17 +373,11 @@ EOF
     local cmd="${1:-status}"
     cmd=$(printf "%s" "$cmd" | tr '[:upper:]' '[:lower:]')
 
-    ###########################################################################
-    # COMMAND NORMALIZATION
-    ###########################################################################
     case "$cmd" in
         ls) cmd="list" ;;
         stat) cmd="status" ;;
     esac
 
-    ###########################################################################
-    # Alias Commands
-    ###########################################################################
     if [[ "$cmd" == "alias" ]]; then
         case "${2:-list}" in
             list) _alias_list ;;
@@ -426,7 +386,7 @@ EOF
                 _msg ok "Alias added: $4 → $3"
                 ;;
             remove)
-                grep -vE "[[:space:]]$3$" "$ALIAS_FILE" | _alias_write
+                command grep -vE "[[:space:]]$3$" "$ALIAS_FILE" | _alias_write
                 _msg ok "Alias removed: $3"
                 ;;
             edit) "$(_get_editor)" "$ALIAS_FILE" ;;
@@ -435,9 +395,6 @@ EOF
         return
     fi
 
-    ###########################################################################
-    # Core Commands
-    ###########################################################################
     case "$cmd" in
         help) _show_help; return ;;
         list)
@@ -450,23 +407,20 @@ EOF
             done
             return ;;
         status)
-            [[ -f "$CURRENT_FILE" ]] && _msg info "Active: $(_get_name "$(cat "$CURRENT_FILE")")"
+            [[ -f "$CURRENT_FILE" ]] && _msg info "Active: $(_get_name "$(command cat "$CURRENT_FILE")")"
             return ;;
         edit)
             "$(_get_editor)" "$DIR/config.yaml"
             return ;;
         diff)
-            diff -u "$DIR/config.yaml" "$DIR/$2.config.yaml"
+            command diff -u "$DIR/config.yaml" "$DIR/$2.config.yaml"
             return ;;
         init)
-            _exec mkdir -p "$DIR" "$BACKUP_DIR"
+            command mkdir -p "$DIR" "$BACKUP_DIR"
             _msg ok "Initialization complete."
             return ;;
     esac
 
-    ###########################################################################
-    # Swap Logic
-    ###########################################################################
     local target="$cmd"
     local current=""
     [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE" 2>/dev/null | tr -cd '[:alnum:]')
@@ -490,19 +444,15 @@ EOF
         return 0
     fi
 
-    # Acquire Lock (Strict cleanup routing from here down)
     _acquire_lock || { _msg err "Lock failed (busy?)."; return 1; }
     HAVE_LOCK=true
     trap '_cleanup; return 1' INT TERM
 
-    # ---------------------------------------------------------
-    # State Deduction & Backup 
-    # ---------------------------------------------------------
     if [[ -z "$current" ]] && [[ -f "$DIR/config.yaml" ]]; then
         _msg warn "Unknown state. Fingerprinting..."
         local id match_id=""
         for id in "${IDS[@]}"; do
-            if cmp -s "$DIR/config.yaml" "$DIR/$id.config.yaml" 2>/dev/null; then
+            if command cmp -s "$DIR/config.yaml" "$DIR/$id.config.yaml" 2>/dev/null; then
                 match_id="$id"; break
             fi
         done
@@ -511,24 +461,21 @@ EOF
             current="$match_id"
             echo "$current" > "$CURRENT_FILE"
         else
-            local ts; ts=$(date +%Y%m%d_%H%M%S)
+            local ts; ts=$(command date +%Y%m%d_%H%M%S)
             _msg warn "No match found. Backing up active config..."
-            mkdir -p "$BACKUP_DIR" 2>/dev/null
-            cp -p "$DIR/config.yaml" "$BACKUP_DIR/unknown_$ts.yaml" 2>/dev/null
-            find "$BACKUP_DIR" -type f -mtime +7 -delete 2>/dev/null
+            command mkdir -p "$BACKUP_DIR" 2>/dev/null
+            command cp -p "$DIR/config.yaml" "$BACKUP_DIR/unknown_$ts.yaml" 2>/dev/null
+            command find "$BACKUP_DIR" -type f -mtime +7 -delete 2>/dev/null
         fi
     fi
 
     if [[ -n "$current" ]]; then
         local storage_file="$DIR/$current.config.yaml"
-        if ! cmp -s "$DIR/config.yaml" "$storage_file" 2>/dev/null; then
-            cp -p "$DIR/config.yaml" "$storage_file" 2>/dev/null
+        if ! command cmp -s "$DIR/config.yaml" "$storage_file" 2>/dev/null; then
+            command cp -p "$DIR/config.yaml" "$storage_file" 2>/dev/null
         fi
     fi
 
-    # ---------------------------------------------------------
-    # Perform Atomic Swap
-    # ---------------------------------------------------------
     local src="$DIR/$target.config.yaml"
     if [[ ! -f "$src" ]]; then
         _msg err "Missing profile: $src"
@@ -536,20 +483,19 @@ EOF
         return 1
     fi
 
-    # BUGFIX: Prevent 0-byte profile overrides
     if [[ ! -s "$src" && -s "$DIR/config.yaml" ]]; then
         _msg warn "Target profile [$target] is empty. Adopting active config data..."
-        cp -p "$DIR/config.yaml" "$src" 2>/dev/null
+        command cp -p "$DIR/config.yaml" "$src" 2>/dev/null
     fi
 
-    TMPFILE=$(mktemp "$DIR/.tmp.XXXXXX") || {
+    TMPFILE=$(command mktemp "$DIR/.tmp.XXXXXX") || {
         _msg err "Failed to create temp file."
         _cleanup
         return 1
     }
     
-    cp -p "$src" "$TMPFILE"
-    mv "$TMPFILE" "$DIR/config.yaml"
+    command cp -p "$src" "$TMPFILE"
+    command mv -f "$TMPFILE" "$DIR/config.yaml"
     echo "$target" > "$CURRENT_FILE"
 
     _msg ok "Switched → $(_get_name "$target")"
@@ -564,10 +510,9 @@ EOF
 if [[ $- == *i* ]]; then
     _aichat_swap alias rebuild 2>/dev/null
 
-    # Sync environment variable on boot
     _MU_AICHAT_CUR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}/current"
     if [[ -f "$_MU_AICHAT_CUR" ]]; then
-        export MOTHER_AI_PROFILE="$(cat "$_MU_AICHAT_CUR" 2>/dev/null | tr -cd '[:alnum:]')"
+        export MOTHER_AI_PROFILE="$(command cat "$_MU_AICHAT_CUR" 2>/dev/null | tr -cd '[:alnum:]')"
     fi
 fi
 
@@ -577,13 +522,11 @@ fi
 mother-ai(){
     _mbanner "AI CONFIGURATION"
 
-    # Pass all commands down to aichat_swap
     _aichat_swap "$@"
 
-    # Silently resync MOTHER_AI_PROFILE after any operation
     local cur="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}/current"
     if [[ -f "$cur" ]]; then
-        export MOTHER_AI_PROFILE="$(cat "$cur" 2>/dev/null | tr -cd '[:alnum:]')"
+        export MOTHER_AI_PROFILE="$(command cat "$cur" 2>/dev/null | tr -cd '[:alnum:]')"
     fi
 }
 
