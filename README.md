@@ -20,7 +20,7 @@ It serves as the execution environment and orchestration layer for AI configurat
 
 - `bashrc`  
   Core shell runtime (currently encapsulates all logic)  
-  → integrates `aiswap v1.2.3` and persistent SSH socket management
+  → integrates `aiswap v1.2.6` and persistent SSH socket management
 
 - `aichat/` (Tentative)  
   Placeholder for profile + alias data layer  
@@ -46,7 +46,7 @@ It serves as the execution environment and orchestration layer for AI configurat
 
 ## Status
 
-⚠️ Phase 3 (Active Development)
+⚠️ Phase 4 (Active Development)
 
 - Structure is evolving
 - Interfaces may shift between patches
