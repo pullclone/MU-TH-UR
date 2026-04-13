@@ -1,6 +1,6 @@
 # ~/.bashrc — MU/TH/UR Structured Operator Shell
 # Maintainer: Ethan P. Kelley
-# Rebuilt: 2026-04-07 (aiswap v1.2.6 + Core Inoculation)
+# Rebuilt: 2026-04-07 (aiswap v1.2.7 + UX/QoL Restoration)
 
 #######################################################
 # INTERACTIVE GUARD
@@ -42,7 +42,7 @@ case ";$PROMPT_COMMAND;" in
 esac
 
 #######################################################
-# ENVIRONMENT
+# ENVIRONMENT & COLORS
 #######################################################
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -56,10 +56,21 @@ export CLICOLOR=1
 export GOPATH="${GOPATH:-$HOME/go}"
 export GOBIN="${GOBIN:-$GOPATH/bin}"
 
+# LESS / MANPAGE COLORS
+export LESS_TERMCAP_mb=$'\e[1;31m'
+export LESS_TERMCAP_md=$'\e[1;31m'
+export LESS_TERMCAP_me=$'\e[0m'
+export LESS_TERMCAP_se=$'\e[0m'
+export LESS_TERMCAP_so=$'\e[1;44;33m'
+export LESS_TERMCAP_ue=$'\e[0m'
+export LESS_TERMCAP_us=$'\e[1;32m'
+
 #######################################################
 # PATH
 #######################################################
 __path_prepend(){ [[ -d "$1" && ":$PATH:" != *":$1:"* ]] && PATH="$1:$PATH"; }
+__path_append(){ [[ -d "$1" && ":$PATH:" != *":$1:"* ]] && PATH="$PATH:$1"; }
+
 __path_prepend "$HOME/.local/bin"
 __path_prepend "$HOME/.cargo/bin"
 __path_prepend "$GOBIN"
@@ -133,6 +144,11 @@ cargo-up(){
     cd "$p"
 }
 
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
+alias ~='cd ~'
+
 #######################################################
 # FILE OPS
 #######################################################
@@ -141,7 +157,7 @@ alias mv='mv -i'
 alias rm='rm -i'
 alias mkdir='mkdir -pv'
 
-cargo-list(){ _cmd eza && eza -al --icons || ls -alF; }
+cargo-list(){ _cmd eza && eza -al --icons --group-directories-first || ls -alF; }
 cargo-search(){ _cmd rg && rg "$@" || grep -R "$@"; }
 
 #######################################################
@@ -157,12 +173,22 @@ hyper-diff(){ git diff; }
 #######################################################
 # NETWORK
 #######################################################
+alias ping='ping -c 5'
+alias wget='wget -c'
+alias curl='curl -L'
+
 net-local(){ hostname -I | awk '{print $1}'; }
 net-public(){ curl -s https://ifconfig.me; }
 
 #######################################################
-# OBSERVABILITY
+# OBSERVABILITY & QOL
 #######################################################
+alias log='history'
+alias c='history -c'
+alias j='jobs -l'
+alias zero='clear'
+alias path='echo -e ${PATH//:/\n}'
+
 scan-proc(){
     _mbanner "PROCESS SCAN"
     ps aux --sort=-%mem | head -n 15
@@ -202,10 +228,12 @@ if [[ -z "$_MU_SSH_AUTH_ATTEMPTED" ]]; then
 fi
 
 #######################################################
-# AICHAT CORE (v1.2.6 — inoculated command expansion)
+# AICHAT CORE (v1.2.7 — UX/Structural parity)
 #######################################################
 _aichat_swap() {
-    local VERSION="1.2.6"
+    local VERSION="1.2.7"
+
+    # Paths
     local BASE_DIR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}"
     local DIR="$BASE_DIR"
     local BACKUP_DIR="$DIR/backups"
@@ -213,20 +241,29 @@ _aichat_swap() {
     local CURRENT_FILE="$DIR/current"
     local ALIAS_FILE="$DIR/aliases"
 
+    # Profiles (Defaults)
     local IDS=(c g m o)
     local NAMES=(altostrat alpha lechat stargate)
-    local DRY_RUN=false VERBOSE=false TMPFILE="" HAVE_LOCK=false
 
+    # Flags
+    local DRY_RUN=false
+    local VERBOSE=false
+    local TMPFILE=""
+    local HAVE_LOCK=false
+
+    # Dynamically merge file-based aliases into engine memory (Bash 3.2 Portable)
     _load_profiles() {
         [[ -f "$ALIAS_FILE" ]] || return 0
         local new_ids=() new_names=()
         local i j found
 
+        # Load defaults
         for i in "${!IDS[@]}"; do
             new_ids+=("${IDS[$i]}")
             new_names+=("${NAMES[$i]}")
         done
 
+        # Merge overrides / additions
         while read -r id name; do
             [[ -z "$id" || -z "$name" || "$id" == \#* ]] && continue
             found=false
@@ -246,9 +283,12 @@ _aichat_swap() {
         IDS=("${new_ids[@]}")
         NAMES=("${new_names[@]}")
     }
-    
+
     _load_profiles
 
+    ###########################################################################
+    # Helpers
+    ###########################################################################
     _msg() {
         local type="$1"; shift
         local color=0 out=1 sym=""
@@ -260,19 +300,33 @@ _aichat_swap() {
             dry) color=5; sym="🔍 " ;;
         esac
         if [[ -t $out ]] && command -v tput >/dev/null 2>&1; then
-            printf "%b\n" "$(tput setaf $color)${sym}$*$(tput sgr0)" >&$out
+            printf "%b\n" "$(command tput setaf $color)${sym}$*$(command tput sgr0)" >&$out
         else
             printf "%s\n" "${sym}$*" >&$out
         fi
     }
 
+    _exec() {
+        local cmd="$1"; shift
+        if $DRY_RUN || $VERBOSE; then
+            local debug="$cmd"
+            for arg in "$@"; do debug="$debug $(printf "%q" "$arg")"; done
+            $DRY_RUN && _msg dry "[DRY-RUN] $debug" && return 0
+            _msg info "$debug"
+        fi
+        "$cmd" "$@"
+    }
+
     _get_editor() {
         [[ -n "$EDITOR" ]] && { echo "$EDITOR"; return; }
         local editors=(code subl micro nano vim vi)
+        local ed
         for ed in "${editors[@]}"; do
             command -v "$ed" >/dev/null 2>&1 && { echo "$ed"; return; }
         done
-        echo "vi"
+        if command -v xdg-open >/dev/null 2>&1; then echo "xdg-open"; return; fi
+        if command -v open >/dev/null 2>&1; then echo "open"; return; fi
+        echo "cat"
     }
 
     _get_name() {
@@ -283,6 +337,9 @@ _aichat_swap() {
         echo "unknown"
     }
 
+    ###########################################################################
+    # Alias Control Plane
+    ###########################################################################
     _alias_list() { [[ -f "$ALIAS_FILE" ]] && command cat "$ALIAS_FILE"; }
 
     _alias_write() {
@@ -300,6 +357,9 @@ _aichat_swap() {
         done
     }
 
+    ###########################################################################
+    # Locking & Cleanup
+    ###########################################################################
     _acquire_lock() {
         command mkdir -p "$DIR" 2>/dev/null
         local retries=0 max=6 stale=30
@@ -337,6 +397,9 @@ _aichat_swap() {
         trap - INT TERM 2>/dev/null
     }
 
+    ###########################################################################
+    # HELP
+    ###########################################################################
     _show_help() {
         cat <<EOF
 aiswap v$VERSION
@@ -355,6 +418,9 @@ Commands:
 EOF
     }
 
+    ###########################################################################
+    # ARG PARSING
+    ###########################################################################
     local args=()
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -378,6 +444,9 @@ EOF
         stat) cmd="status" ;;
     esac
 
+    ###########################################################################
+    # Alias Commands
+    ###########################################################################
     if [[ "$cmd" == "alias" ]]; then
         case "${2:-list}" in
             list) _alias_list ;;
@@ -395,11 +464,14 @@ EOF
         return
     fi
 
+    ###########################################################################
+    # Core Commands
+    ###########################################################################
     case "$cmd" in
         help) _show_help; return ;;
         list)
             local current=""
-            [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE" 2>/dev/null | tr -cd '[:alnum:]')
+            [[ -f "$CURRENT_FILE" ]] && current=$(command head -n1 "$CURRENT_FILE" 2>/dev/null | command tr -d '\r\n')
             for i in "${!IDS[@]}"; do
                 local mark=" "
                 [[ "${IDS[$i]}" == "$current" ]] && mark="*"
@@ -407,23 +479,40 @@ EOF
             done
             return ;;
         status)
-            [[ -f "$CURRENT_FILE" ]] && _msg info "Active: $(_get_name "$(command cat "$CURRENT_FILE")")"
+            [[ -f "$CURRENT_FILE" ]] && _msg info "Active: $(_get_name "$(command cat "$CURRENT_FILE" 2>/dev/null | command tr -d '\r\n')")"
             return ;;
         edit)
             "$(_get_editor)" "$DIR/config.yaml"
             return ;;
         diff)
-            command diff -u "$DIR/config.yaml" "$DIR/$2.config.yaml"
-            return ;;
+            local target_id="$2"
+            [[ -z "$target_id" ]] && { _msg err "Usage: diff <profile_id>"; return 1; }
+            if ! command -v diff >/dev/null 2>&1; then _msg err "'diff' command not found."; return 1; fi
+
+            local diff_opts=(-u)
+            if command diff --color=auto /dev/null /dev/null >/dev/null 2>&1; then
+                diff_opts+=("--color=auto")
+            fi
+
+            if [[ ! -f "$DIR/$target_id.config.yaml" ]]; then _msg err "Profile '$target_id' not found."; return 1; fi
+            command diff "${diff_opts[@]}" "$DIR/config.yaml" "$DIR/$target_id.config.yaml"
+            return 0 ;;
         init)
             command mkdir -p "$DIR" "$BACKUP_DIR"
+            [[ ! -f "$DIR/config.yaml" ]] && command touch "$DIR/config.yaml"
+            for id in "${IDS[@]}"; do
+                [[ ! -f "$DIR/$id.config.yaml" ]] && command touch "$DIR/$id.config.yaml"
+            done
             _msg ok "Initialization complete."
             return ;;
     esac
 
+    ###########################################################################
+    # Swap Logic
+    ###########################################################################
     local target="$cmd"
     local current=""
-    [[ -f "$CURRENT_FILE" ]] && current=$(head -n1 "$CURRENT_FILE" 2>/dev/null | tr -cd '[:alnum:]')
+    [[ -f "$CURRENT_FILE" ]] && current=$(command head -n1 "$CURRENT_FILE" 2>/dev/null | command tr -d '\r\n')
 
     local valid_target=false i
     for i in "${!IDS[@]}"; do [[ "$target" == "${IDS[$i]}" ]] && valid_target=true && break; done
@@ -448,6 +537,9 @@ EOF
     HAVE_LOCK=true
     trap '_cleanup; return 1' INT TERM
 
+    # ---------------------------------------------------------
+    # State Deduction & Backup
+    # ---------------------------------------------------------
     if [[ -z "$current" ]] && [[ -f "$DIR/config.yaml" ]]; then
         _msg warn "Unknown state. Fingerprinting..."
         local id match_id=""
@@ -456,7 +548,7 @@ EOF
                 match_id="$id"; break
             fi
         done
-        
+
         if [[ -n "$match_id" ]]; then
             current="$match_id"
             echo "$current" > "$CURRENT_FILE"
@@ -476,6 +568,9 @@ EOF
         fi
     fi
 
+    # ---------------------------------------------------------
+    # Perform Atomic Swap
+    # ---------------------------------------------------------
     local src="$DIR/$target.config.yaml"
     if [[ ! -f "$src" ]]; then
         _msg err "Missing profile: $src"
@@ -493,13 +588,13 @@ EOF
         _cleanup
         return 1
     }
-    
+
     command cp -p "$src" "$TMPFILE"
     command mv -f "$TMPFILE" "$DIR/config.yaml"
     echo "$target" > "$CURRENT_FILE"
 
     _msg ok "Switched → $(_get_name "$target")"
-    
+
     _cleanup
     return 0
 }
@@ -510,9 +605,10 @@ EOF
 if [[ $- == *i* ]]; then
     _aichat_swap alias rebuild 2>/dev/null
 
+    # Sync environment variable on boot
     _MU_AICHAT_CUR="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}/current"
     if [[ -f "$_MU_AICHAT_CUR" ]]; then
-        export MOTHER_AI_PROFILE="$(command cat "$_MU_AICHAT_CUR" 2>/dev/null | tr -cd '[:alnum:]')"
+        export MOTHER_AI_PROFILE="$(command cat "$_MU_AICHAT_CUR" 2>/dev/null | command tr -d '\r\n')"
     fi
 fi
 
@@ -522,11 +618,13 @@ fi
 mother-ai(){
     _mbanner "AI CONFIGURATION"
 
+    # Pass all commands down to aichat_swap
     _aichat_swap "$@"
 
+    # Silently resync MOTHER_AI_PROFILE after any operation
     local cur="${AICHAT_CONF_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/aichat}/current"
     if [[ -f "$cur" ]]; then
-        export MOTHER_AI_PROFILE="$(command cat "$cur" 2>/dev/null | tr -cd '[:alnum:]')"
+        export MOTHER_AI_PROFILE="$(command cat "$cur" 2>/dev/null | command tr -d '\r\n')"
     fi
 }
 
@@ -536,7 +634,7 @@ alias aiswap='_aichat_swap'
 #######################################################
 # MODERN TOOLING
 #######################################################
-_cmd eza && alias ls='eza -a --icons'
+_cmd eza && alias ls='eza -a --icons --group-directories-first'
 _cmd bat && alias cat='bat'
 _cmd rg  && alias grep='rg'
 
@@ -551,14 +649,14 @@ alias gs='hyper-status'
 alias ga='hyper-add'
 alias gc='hyper-commit'
 alias gp='hyper-push'
+alias gl='hyper-log'
+alias gd='hyper-diff'
 
 alias ll='cargo-list'
 alias iplocal='net-local'
 alias ippublic='net-public'
 
 alias reload='mother-reload'
-alias zero='clear'
-alias path='echo -e ${PATH//:/\n}'
 
 #######################################################
 # PROMPT
@@ -572,4 +670,7 @@ fi
 #######################################################
 # BOOT
 #######################################################
+_cmd zoxide && eval "$(zoxide init bash)"
+bind '"\C-f":"zi\n"' 2>/dev/null
+
 [[ -z "$MOTHER_SILENT" ]] && mother-status
