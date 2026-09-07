@@ -1,0 +1,61 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate on Linux
+        run: bash tests/validate.sh
+      - name: ShellCheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          shellcheck -s bash bashrc install.sh tests/*.sh
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate with system Bash
+        run: /bin/bash tests/validate.sh
+      - name: Validate with Homebrew Bash when installed
+        run: |
+          if command -v brew >/dev/null 2>&1; then
+            brew_bash="$(brew --prefix)/bin/bash"
+            if [[ -x $brew_bash ]]; then
+              "$brew_bash" tests/validate.sh
+              exit
+            fi
+          fi
+          printf 'Homebrew Bash is not installed; system Bash was tested.\n'
+
+  freebsd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate in FreeBSD
+        uses: vmactions/freebsd-vm@f0552d3b69211736abd97f02ff3d4674c56b73b1 # v1.5.5
+        with:
+          release: '15.1'
+          mem: '2048'
+          sync: tar
+          copyback: false
+          prepare: pkg install -y bash
+          run: /usr/local/bin/bash tests/validate.sh
