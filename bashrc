@@ -171,15 +171,17 @@ start-ssh-agent() {
         if [[ -S $socket ]]; then
             status=0
             SSH_AUTH_SOCK="$socket" command ssh-add -l >/dev/null 2>&1 || status=$?
-            case $status in
-                0|1)
-                    [[ ${SSH_AUTH_SOCK:-} == "$socket" ]] || printf 'unset SSH_AGENT_PID;\n'
-                    printf 'export SSH_AUTH_SOCK=%q;\n' "$socket"
-                    exit 0
-                    ;;
-                2) command rm -f -- "$socket" || exit ;;
-                *) printf 'SSH agent probe failed\n' >&2; exit "$status" ;;
-            esac
+            # Avoid case-pattern parentheses inside $() for Bash 3.2's parser.
+            if (( status == 0 || status == 1 )); then
+                [[ ${SSH_AUTH_SOCK:-} == "$socket" ]] || printf 'unset SSH_AGENT_PID;\n'
+                printf 'export SSH_AUTH_SOCK=%q;\n' "$socket"
+                exit 0
+            elif (( status == 2 )); then
+                command rm -f -- "$socket" || exit
+            else
+                printf 'SSH agent probe failed\n' >&2
+                exit "$status"
+            fi
         fi
         command ssh-agent -s -a "$socket"
     ) || return

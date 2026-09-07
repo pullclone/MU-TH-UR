@@ -37,7 +37,8 @@ load() {
 expect_failure() { "$@" > "$HOME/result" 2>&1 && fail "unexpected success: $*"; return 0; }
 contains() { command grep -F -- "$2" "$1" >/dev/null || fail "missing <$2> in $1"; }
 # Invoked through PROMPT_COMMAND to observe the previous command's status.
-# shellcheck disable=SC2329
+# Older ShellCheck versions report the same indirect invocation as SC2317.
+# shellcheck disable=SC2317,SC2329
 capture_status() { printf '%s\n' "$?" >> "$HOME/prompt-status"; }
 
 case $TEST_CASE in
