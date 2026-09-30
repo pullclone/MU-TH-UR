@@ -97,4 +97,4 @@ The GitHub Actions workflow runs validation on the listed platforms and ShellChe
 
 ## License
 
-Apache-2.0. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
