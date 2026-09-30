@@ -161,7 +161,15 @@ INIT
         assert_eq "$PWD" "$HOME" up
         expect_failure up 0
         expect_failure up abc
+        expect_failure up ''
+        expect_failure up 1 extra
         expect_failure mkcd
+        command mkdir -p "$HOME/elsewhere/cdpath-target"
+        CDPATH="$HOME/elsewhere"
+        mkcd cdpath-target > "$HOME/result" || fail 'mkcd failed with CDPATH'
+        assert_eq "$PWD" "$HOME/cdpath-target" 'mkcd followed CDPATH instead of the created directory'
+        assert_eq "$CDPATH" "$HOME/elsewhere" 'mkcd changed caller CDPATH'
+        [[ ! -s $HOME/result ]] || fail 'mkcd unexpectedly printed a CDPATH destination'
         ;;
     search)
         load
@@ -232,6 +240,23 @@ INIT
         expect_failure start-ssh-agent
         [[ -z ${SSH_AUTH_SOCK:-} ]] || fail 'failed agent start changed socket environment'
         ;;
+    ssh_paths)
+        load
+        socket="$XDG_RUNTIME_DIR/mother-ssh-agent.socket"
+        printf 'keep\n' > "$socket"
+        expect_failure start-ssh-agent
+        assert_eq "$(command cat "$socket")" keep 'agent startup replaced a regular file'
+        command rm -- "$socket"
+        command ln -s "$HOME/missing-socket" "$socket"
+        expect_failure start-ssh-agent
+        [[ -L $socket ]] || fail 'agent startup removed a symlink'
+        command rm -- "$socket"
+        command mkdir -- "$socket.lock"
+        expect_failure start-ssh-agent
+        [[ -d $socket.lock ]] || fail 'agent startup removed another startup lock'
+        [[ ! -s $TEST_CALLS ]] || fail 'unsafe socket path reached SSH tools'
+        [[ -z ${SSH_AUTH_SOCK:-} ]] || fail 'rejected socket changed agent environment'
+        ;;
     real_agent)
         load
         export TEST_REAL_AGENT=1
@@ -246,8 +271,11 @@ INIT
         assert_eq "$(command cat "$TEST_AGENT_PIDS")" "$first_pids" 'empty live agent was replaced'
         ;;
     installer)
+        # A relative invocation must resolve locally, even with inherited CDPATH.
+        builtin cd "$TEST_REPO" || fail 'cannot enter repository'
+        export CDPATH="$HOME"
         printf 'original configuration\n' > "$HOME/.bashrc"
-        bash "$TEST_REPO/install.sh" >/dev/null || fail 'initial installation failed'
+        bash ./install.sh >/dev/null || fail 'initial installation failed with CDPATH'
         [[ -L $HOME/.bashrc ]] || fail 'installer did not create a symlink'
         assert_eq "$(command readlink "$HOME/.bashrc")" "$TEST_REPO/bashrc" 'installed link'
         backups=("$HOME"/.bashrc.before-mu-th-ur.*)

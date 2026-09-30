@@ -65,6 +65,8 @@ Use this after your existing Homebrew environment setup. See [upstream bash-comp
 - `gs`, `gd`, `gl`: Git shortcuts.
 - `net-local`, `net-public`, `scan-proc`, `scan-disk`, `path`: diagnostics. `scan-disk` includes hidden entries.
 
+`mkcd DIRECTORY` creates and enters that exact path, independent of `CDPATH`. `up` moves one directory upward by default; `up COUNT` accepts one positive integer argument.
+
 `search` passes arguments directly to ripgrep when installed, retaining its full option set. Otherwise, its recursive grep fallback supports individually supplied `-n`, `-i`, `-l`, `-w`, and `-F` options, `-e PATTERN`, and `--` to end option parsing. Common forms are `search -n PATTERN PATH`, `search -n -- PATTERN PATH`, and `search -n -e PATTERN -- PATH`. The fallback defaults paths to the current directory and uses extended regular expressions unless `-F` is supplied. Regex syntax and ignored-file filtering depend on the backend; use `-F` for shared literal matching. Other ripgrep options require ripgrep to be installed.
 
 If an interrupted SSH-agent start leaves a lock directory, first confirm that no start is still running. The empty lock directory named in the error can then be removed with `rmdir` before retrying.

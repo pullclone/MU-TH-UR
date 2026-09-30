@@ -190,12 +190,14 @@ start-ssh-agent() {
 
 mkcd() {
     [[ $# -eq 1 ]] || { printf 'usage: mkcd DIRECTORY\n' >&2; return 2; }
+    # Enter the path just created, even when the caller uses CDPATH.
+    local CDPATH=''
     command mkdir -p -- "$1" || return
     builtin cd -- "$1" || return
 }
 up() {
-    local count="${1:-1}" path='' i
-    [[ $count =~ ^[1-9][0-9]*$ ]] || { printf 'usage: up [POSITIVE_COUNT]\n' >&2; return 2; }
+    local count="${1-1}" path='' i
+    [[ $# -le 1 && $count =~ ^[1-9][0-9]*$ ]] || { printf 'usage: up [POSITIVE_COUNT]\n' >&2; return 2; }
     for ((i = 0; i < count; i++)); do path+='../'; done
     builtin cd -- "$path" || return
 }

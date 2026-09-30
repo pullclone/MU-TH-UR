@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Behavioral checks run in disposable homes with a restricted command path.
 set -eu
-repo_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+repo_dir="$(CDPATH='' builtin cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 test_bash="${BASH}"
 # macOS TMPDIR paths can exceed the Unix socket length limit in the agent test.
 test_root="$(mktemp -d /tmp/mother-test.XXXXXXXX)"
@@ -74,7 +74,7 @@ record() {
         failures=$((failures + 1))
     fi
 }
-for name in bashrc install.sh tests/cases.sh; do
+for name in bashrc install.sh tests/validate.sh tests/cases.sh; do
     check_name="$name syntax"
     record "$test_bash" -n "$repo_dir/$name"
 done
@@ -99,7 +99,7 @@ run_case() {
     command cat "$case_home/output" >&2
     return 1
 }
-for name in source_reload system_startup noninteractive prompt_scalar path_preferences missing_optional optional_init optional_init_failure navigation search curl_failure diagnostics_failure disk session_failures ssh_failures installer; do
+for name in source_reload system_startup noninteractive prompt_scalar path_preferences missing_optional optional_init optional_init_failure navigation search curl_failure diagnostics_failure disk session_failures ssh_failures ssh_paths installer; do
     check_name="$name"
     if [[ $name == noninteractive ]]; then record run_case "$name" -c; else record run_case "$name"; fi
 done

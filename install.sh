@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_dir="$(CDPATH='' builtin cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source_file="$repo_dir/bashrc"
 [[ -n ${HOME:-} && -d $HOME ]] || { printf 'HOME must name an existing directory.\n' >&2; exit 1; }
 target="$HOME/.bashrc"
